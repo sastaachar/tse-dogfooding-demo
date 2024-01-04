@@ -1,3 +1,4 @@
+import { fetchUserAndToken } from '@app/api/getUserAndToken';
 import { THOUGHTSPOT_HOST } from '@app/environment';
 import { getFullAccessToken } from '@app/utils/tse.utils';
 import { PrepareAction, createAction, createAsyncThunk, createSlice } from '@reduxjs/toolkit';
@@ -23,9 +24,8 @@ const doInit = createAsyncThunk('tse/doInit', async (_, { dispatch }) => {
       thoughtSpotHost: initialState.host,
       authType: AuthType.TrustedAuthTokenCookieless,
       getAuthToken: async () => {
-        const [token, error] = await getFullAccessToken();
-        console.log(token, error, 'token');
-        if (error || !token) return '';
+        const { token } = await fetchUserAndToken();
+        if (!token) return '';
         return token;
       },
     })
