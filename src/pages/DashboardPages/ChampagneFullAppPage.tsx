@@ -61,10 +61,12 @@ export const ChampagneFullAppPage: React.FC = () => {
                   style: {
                     customCSS: {
                       variables: {
-                        '--ts-var-application-color': themeObject[theme].background,
+                        '--ts-var-application-color': '#000000',
                         '--ts-var-root-background': themeObject[theme].background,
-                        '--ts-var-nav-background': themeObject[theme].siderBackground,
-                        '--ts-var-root-color': themeObject[theme].textMain,
+                        '--ts-var-nav-background': '#295ce1',
+                        '--ts-var-root-color': themeObject[theme].textDark,
+                        '--ts-var-menu-color': themeObject[theme].textDark,
+                        '--ts-var-search-data-button-background': themeObject[theme].textLight,
                       },
                       rules_UNSTABLE: {
                         '.bk-powered-footer': {
@@ -76,7 +78,7 @@ export const ChampagneFullAppPage: React.FC = () => {
                         },
                         '.home-trending-module__rightPanelWrapper': {
                           'background-color': themeObject[theme].siderBackground,
-                          color: themeObject[theme].textSiderPrimary,
+                          color: themeObject[theme].textDark,
                         },
                         '.bk-powered-by-ts-ribbon': {
                           'background-color': themeObject[theme].siderBackground,
@@ -99,7 +101,7 @@ export const ChampagneFullAppPage: React.FC = () => {
 
   return (
     <>
-      <PageTitle>{t('common.medical-dashboard')}</PageTitle>
+      <PageTitle>{t('common.full-app-embed')}</PageTitle>
       {isDesktop ? desktopLayout : desktopLayout}
     </>
   );

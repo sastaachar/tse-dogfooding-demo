@@ -21,6 +21,9 @@ import { TseWrapper } from '@app/components/tse-dashboard/TseWrapper';
 import Base from 'antd/lib/typography/Base';
 import { FilterIcon } from '@app/components/common/icons/FilterIcon';
 import { Btn } from '@app/components/header/components/HeaderSearch/HeaderSearch.styles';
+import { fetchUserAndToken } from '@app/api/getUserAndToken';
+import JiraIssueModal from '@app/components/common/Modal/JiraIssueModal';
+import { BaseInput } from '@app/components/common/inputs/BaseInput/BaseInput';
 
 function SuperSelect({
   columnName,
@@ -40,10 +43,16 @@ function SuperSelect({
     const allValues = [...new Set([...data, ...options])];
     setOptions(allValues);
   };
+  const handleDeselect = (deselectedValue: any) => {
+    const newValues = selectedValues.filter((value) => value !== deselectedValue);
+    setSelectedValues(newValues);
+    updateValues?.(newValues);
+  };
 
   useEffect(() => {
-    searchData({ query: 'a', columnName }).then(([data]) => updateOptions(data));
-  }, []);
+    setSelectedValues(defaultValues || []);
+    searchData({ query: '', columnName }).then(([data]) => updateOptions(data));
+  }, [defaultValues, columnName]);
 
   return (
     <BaseButtonsForm.Item
@@ -75,6 +84,7 @@ function SuperSelect({
           updateValues?.(newValues);
           setSelectedValues(newValues);
         }}
+        onDeselect={handleDeselect}
         value={selectedValues}
         loading={isLoading}
       />
@@ -106,6 +116,9 @@ export const SupportCentralLiveboardPage: React.FC = () => {
   const embedRef = useEmbedRef();
 
   const [isBasicModalOpen, setIsBasicModalOpen] = useState(false);
+  const [jiraIssueId, setJiraIssueId] = useState('');
+  const [jiraIssueData, setJiraIssueData] = useState(null);
+  const [isJiraModalOpen, setIsJiraModalOpen] = useState(false);
 
   const [accountNames, setAccountNames] = useState<string[]>([]);
   const [caseNumbers, setCaseNumbers] = useState<string[]>([]);
@@ -113,12 +126,40 @@ export const SupportCentralLiveboardPage: React.FC = () => {
   const [editAccountNames, setEditAccountNames] = useState<string[]>([]);
   const [editCaseNumbers, setEditCaseNumbers] = useState<string[]>([]);
 
+  const handleJiraIssueIdChange = (event: any) => {
+    setJiraIssueId(event.target.value);
+  };
+  const fetchJiraIssueData = async () => {
+    const jiraBaseUrl = process.env.REACT_APP_JIRA_BASE_URL;
+    const jiraToken = btoa(`${process.env.REACT_APP_JIRA_USERNAME}:${process.env.REACT_APP_JIRA_API_TOKEN}`);
+
+    try {
+      const response = await axios.get(`${jiraBaseUrl}/rest/api/3/issue/${jiraIssueId}`, {
+        headers: {
+          Authorization: `Basic ${jiraToken}`,
+          Accept: 'application/json',
+        },
+      });
+      if (response.data) {
+        setJiraIssueData(response.data);
+        setIsJiraModalOpen(true);
+      }
+    } catch (error) {
+      console.error('Error fetching JIRA issue:', error);
+    }
+  };
+
   const CardHeader = () => {
     return (
       <BaseRow>
         <BaseCol lg={4}>Support Central</BaseCol>
         <BaseCol>
-          <Btn icon={<FilterIcon />} onClick={() => setIsBasicModalOpen(!isBasicModalOpen)} size="small" />
+          <div className="search-container">
+            <Btn icon={<FilterIcon />} onClick={() => setIsBasicModalOpen(!isBasicModalOpen)} size="small" />
+            <BaseInput value={jiraIssueId} onChange={(e) => setJiraIssueId(e.target.value)} placeholder="ISSUE ID" />
+            <Btn onClick={fetchJiraIssueData}>Search</Btn>
+          </div>
+          {isJiraModalOpen && <JiraIssueModal issueData={jiraIssueData} onClose={() => setIsJiraModalOpen(false)} />}
         </BaseCol>
       </BaseRow>
     );
@@ -136,25 +177,49 @@ export const SupportCentralLiveboardPage: React.FC = () => {
               setCaseNumbers(editCaseNumbers);
               setIsBasicModalOpen(false);
               if (embedRef.current) {
-                embedRef.current.trigger(HostEvent.UpdateRuntimeFilters, [
-                  {
-                    columnName: 'Account Name',
-                    operator: 'EQ',
-                    values: editAccountNames,
-                  },
-                  {
-                    columnName: 'Case Number',
-                    operator: 'EQ',
-                    values: editCaseNumbers,
-                  },
-                ]);
+                if (editAccountNames.length == 0 && editCaseNumbers.length > 0) {
+                  embedRef.current.trigger(HostEvent.UpdateRuntimeFilters, [
+                    {
+                      columnName: 'Case Number',
+                      operator: 'EQ',
+                      values: editCaseNumbers,
+                    },
+                  ]);
+                } else if (editAccountNames.length > 0 && editCaseNumbers.length == 0) {
+                  embedRef.current.trigger(HostEvent.UpdateRuntimeFilters, [
+                    {
+                      columnName: 'Account Name',
+                      operator: 'EQ',
+                      values: editAccountNames,
+                    },
+                  ]);
+                } else if (editAccountNames.length > 0 && editCaseNumbers.length > 0) {
+                  embedRef.current.trigger(HostEvent.UpdateRuntimeFilters, [
+                    {
+                      columnName: 'Case Number',
+                      operator: 'EQ',
+                      values: editCaseNumbers,
+                    },
+                    {
+                      columnName: 'Account Name',
+                      operator: 'EQ',
+                      values: editAccountNames,
+                    },
+                  ]);
+                } else {
+                  embedRef.current.trigger(HostEvent.UpdateRuntimeFilters, []);
+                }
               }
             }}
             onCancel={() => setIsBasicModalOpen(false)}
           >
             <BaseForm>
-              <SuperSelect columnName="Account Name" defaultValues={accountNames} updateValues={setEditAccountNames} />
-              <SuperSelect columnName="Case Number" defaultValues={caseNumbers} updateValues={setEditCaseNumbers} />
+              <SuperSelect
+                columnName="Account Name"
+                defaultValues={editAccountNames}
+                updateValues={setEditAccountNames}
+              />
+              <SuperSelect columnName="Case Number" defaultValues={editCaseNumbers} updateValues={setEditCaseNumbers} />
             </BaseForm>
           </BaseModal>
 
@@ -164,7 +229,20 @@ export const SupportCentralLiveboardPage: React.FC = () => {
                 ref={embedRef as any}
                 className="support-central-liveboard-embed"
                 liveboardId="68dcf3ec-8e9c-491f-8e2c-090bfd81aa73"
-                hiddenActions={[Action.AddToFavorites, Action.Edit]}
+                hiddenActions={[
+                  Action.AddToFavorites,
+                  Action.Edit,
+                  Action.SyncToOtherApps,
+                  Action.SyncToSheets,
+                  Action.ManagePipelines,
+                ]}
+                disabledActions={[
+                  Action.DownloadAsPdf,
+                  Action.ExportTML,
+                  Action.Share,
+                  Action.RenameModalTitleDescription,
+                  Action.SpotIQAnalyze,
+                ]}
                 visibleTabs={showTabs}
                 customizations={{
                   style: {
@@ -192,7 +270,17 @@ export const SupportCentralLiveboardPage: React.FC = () => {
 
   return (
     <>
-      <PageTitle>{t('common.medical-dashboard')}</PageTitle>
+      <PageTitle>{t('common.support-central')}</PageTitle>
+      {/* <div>
+        <input
+          type="text"
+          value={jiraIssueId}
+          onChange={(e) => setJiraIssueId(e.target.value)}
+          placeholder="Enter JIRA Issue ID"
+        />
+        <button onClick={fetchJiraIssueData}>Fetch JIRA Issue</button>
+      </div> */}
+      {/* {isJiraModalOpen && <JiraIssueModal issueData={jiraIssueData} onClose={() => setIsJiraModalOpen(false)} />} */}
       {isDesktop ? desktopLayout : desktopLayout}
     </>
   );
@@ -215,10 +303,7 @@ async function searchData({ query, columnName }: SearchDataParam): Promise<[stri
 
   const url = 'https://champagne.thoughtspotstaging.cloud/api/rest/2.0/searchdata';
 
-  const [token, tokenError] = await getFullAccessToken();
-  if (tokenError) {
-    return [result, tokenError];
-  }
+  const { token } = await fetchUserAndToken();
 
   const headers = {
     Authorization: 'Bearer ' + token,
@@ -234,8 +319,21 @@ async function searchData({ query, columnName }: SearchDataParam): Promise<[stri
     record_size: 500,
   };
 
+  const defaultData = {
+    query_string: `[${columnName}]`,
+    logical_table_identifier: '54beb173-d755-42e0-8f73-4d4ec768114f',
+    data_format: 'COMPACT',
+    record_offset: 0,
+    record_size: 500,
+  };
+
   try {
-    const response = await axios.post(url, data, { headers });
+    let response;
+    if (query.length > 0) {
+      response = await axios.post(url, data, { headers });
+    } else {
+      response = await axios.post(url, defaultData, { headers });
+    }
     result = response.data.contents[0].data_rows.map((e: any) => e[0]);
 
     cachedData[columnName + query] = {
